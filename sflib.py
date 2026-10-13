@@ -27,7 +27,7 @@ USAGE = {0: 'position', 1: 'blendweight', 2: 'blendindices', 3: 'normal', 4: 'ps
          5: 'texcoord', 6: 'tangent', 7: 'binormal', 8: 'tessfactor', 9: 'positiont',
          10: 'color', 11: 'fog', 12: 'depth', 13: 'sample'}
 
-IMG_EXT = ('.bmp', '.dds', '.tga', '.png', '.jpg')
+IMG_EXT = ('.bmp', '.dds', '.tga', '.png', '.jpg', '.psd')
 
 
 class SfmError(Exception):

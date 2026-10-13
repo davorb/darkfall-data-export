@@ -43,8 +43,9 @@ containing `fe ff ff ff, bone_index, ?, duration(float), n_keys`, then a u32 des
 Header `u32 ver, n_verts, n_indices, n_groups, 1`, then per group `n_mats, mat ids...`, then per group
 `tri_count, tri_start, vert_start, vert_count`; 32 byte vertices (pos 3f, normal 3f, 8 u8 blend weights),
 u32 indices. Tile is 1024x1024, local coordinates centred on the tile; its world position is the `terrain_xxx.xml`
-object in the level. Material id N = `texture/dds/NN_tex_terrain_*.dds`. Weight slot used by material k of a group of n:
-`n<=3: 3-n+k`, `n>=4: [0,1,2,3] + last (n-4) of [4,5,6]`. No UVs (derive from world xz).
+object in the level. Material id is an index into `xml/terrain/terrainmaterials.xml` (0..32, one per splat layer),
+not the `NN_` prefix of `texture/dds/NN_tex_terrain_*.dds`. The shader's albedo is that entry's `Near` texture
+(`terrain_rock_alfar_01.dds` for id 19, the dark alfar rock). The 8 blend weights are two B,G,R,A-ordered dwords: material k of a group uses byte `[2,1,0,3,6,5,4,7][k]` (1 material: byte 2; 2: bytes 2,1; ...; 7: bytes 2,1,0,3,6,5,4). No UVs (derive from world xz).
 
 ## `.lvl` level (`SFLV`, 1257 / 1257)
 `u32 version, 4 floats (bounds?), u32 count`, then objects: `u16 id, u16 type, 5 bytes, pos 3f, rot 3f (D3DX yaw/pitch/roll:

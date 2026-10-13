@@ -316,8 +316,8 @@ def parse_ter(d):
     """Terrain tile. Header: magic, version, n_verts, n_indices, then the material groups:
     u32 n_groups, u32 1, n_groups * (u32 n_mats, n_mats * u32 material id), then
     n_groups * (tri_count, tri_start, vert_start, vert_count). Followed (at the end of the file) by
-    n_verts * 32 byte vertices (pos 3f, normal 3f, 8 u8 blend weights, see terrain_slots) and n_indices * u32 indices. Material ids are the numeric prefix of
-    texture/dds/NN_tex_terrain_*.dds. There are no UVs (the game derives them from world position).
+    n_verts * 32 byte vertices (pos 3f, normal 3f, 8 u8 blend weights, see terrain_slots) and n_indices * u32 indices. Material ids index
+    xml/terrain/terrainmaterials.xml (the shader samples that entry's Near texture, not NN_tex_terrain_*). There are no UVs (the game derives them from world position).
     Returns (P, N, W, I, groups)."""
     if d[:4] != b'SFTE':
         raise ValueError('bad magic')
@@ -345,23 +345,34 @@ def parse_ter(d):
 
 
 def terrain_slots(n):
-    """weight slot used by each of the n materials of a terrain group (measured from the data):
-    1:[2] 2:[1,2] 3:[0,1,2] 4:[0..3] 5:[0,1,2,3,6] 6:[0,1,2,3,5,6] 7:[0..6]"""
-    if n <= 3:
-        return list(range(3 - n, 3))
-    return [0, 1, 2, 3] + list(range(7 - (n - 4), 7))
+    """weight byte used by each of the n materials of a terrain group (materials in the order of the .ter header, ascending ids).
+    The 8 blend weights are two D3DCOLOR-style dwords stored as B, G, R, A: material k uses byte [2, 1, 0, 3, 6, 5, 4, 7][k], so a 1-material group
+    uses byte 2, 2 materials [2, 1], 3 materials [2, 1, 0], and so on. Verified exactly (zero error) on 60k coincident seam vertices between
+    single-material groups and groups of 2..7 materials."""
+    return [2, 1, 0, 3, 6, 5, 4, 7][:n]
 
 
 class TerrainMaterials:
-    """terrain material id -> texture file / average colour"""
+    """terrain material id -> Near texture from xml/terrain/terrainmaterials.xml, plus average colour.
+
+    Ids in a .ter are palette indices (0..32), not the NN_ prefix of NN_tex_terrain_*.dds.
+    """
     def __init__(self, src, textures):
         self.src, self.textures = src, textures
         self.files = {}
-        d = src.path('texture', 'dds')
-        for fn in sorted(os.listdir(d)) if os.path.isdir(d) else []:
-            m = re.match(r'^(\d+)_tex_terrain_.*\.dds$', fn, re.I)
-            if m and not re.search(r'(_normal|_mads|copy)', fn, re.I):
-                self.files.setdefault(int(m.group(1)), fn)
+        table = src.path('xml', 'terrain', 'terrainmaterials.xml')
+        if os.path.isfile(table):
+            text = open(table, encoding='latin1').read()
+            for m in re.finditer(r'<SFMaterial ID="(\d+)"\s*>\s*<Near Texture="([^"]+)"', text):
+                fn = m.group(2) + '.dds'
+                if os.path.isfile(src.path('texture', 'dds', fn)):
+                    self.files[int(m.group(1))] = fn
+        if not self.files:
+            d = src.path('texture', 'dds')
+            for fn in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+                m = re.match(r'^(\d+)_tex_terrain_.*\.dds$', fn, re.I)
+                if m and not re.search(r'(_normal|_mads|copy)', fn, re.I):
+                    self.files.setdefault(int(m.group(1)), fn)
         self.colors = {}
 
     def color(self, mid):
@@ -635,7 +646,7 @@ def cmd_maps(a):
     tmat = TerrainMaterials(src, texs)
     os.makedirs(os.path.join(a.out, 'maps'), exist_ok=True)
     mesh_cache = {}
-    for p in iter_files(src, 'level', '.lvl', a.name, a.limit):
+    for p in iter_files(src, a.level_dir, '.lvl', a.name, a.limit):
         nm = os.path.splitext(os.path.basename(p))[0]
         try:
             lv = sflib.parse_lvl(open(p, 'rb').read(), src.ids)
@@ -692,6 +703,7 @@ def main():
     ap.add_argument('--limit', type=int)
     ap.add_argument('--name', help='only files whose name contains this')
     ap.add_argument('--tex-size', type=int, default=512, help='max texture size (picks a smaller DDS mip)')
+    ap.add_argument('--level-dir', default='level', help='maps: subfolder of src holding the .lvl files (e.g. levelold)')
     ap.add_argument('--no-glb', action='store_true', help='maps: only write json')
     a = ap.parse_args()
     for c in (['models', 'terrain', 'collision', 'animated', 'maps'] if a.cmd == 'all' else [a.cmd]):
